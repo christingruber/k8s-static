@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: "nginx"
+spec:
+  type: NodePort
+  ports:
+    - port: 80
+  selector:
+    service: "nginx"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "nginx"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: "nginx"
+  template:
+    metadata:
+      labels:
+        service: "nginx"
+    spec:
+      containers:
+        - image: nginx
+          name: nginx
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - mountPath: "/usr/share/nginx/html"
+              name: www-data
+      initContainers:
+        - name: git
+          image: alpine/git
+          args: ["clone", "--single-branch", "--", "https://github.com/christingruber/k8s-static.git", "/html"]
+          volumeMounts:
+            - mountPath: /html
+              name: www-data
+        - name: bash
+          image: bash
+          command: ["rm", "-rf", "/html/deployment.yaml", "/html/.git", "/html/.gitignore"]
+          volumeMounts:
+            - mountPath: /html
+              name: www-data
+      volumes:
+        - name: www-data
+          emptyDir: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nginx
+spec:
+  rules:
+    - host: "${HOSTNAME}"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx
+                port:
+                  number: 80
